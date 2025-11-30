@@ -497,63 +497,6 @@ class _DoctorBrowsePageState extends State<DoctorBrowsePage> with SingleTickerPr
                                     },
                                   );
                                 },
-                                onDelete: () async {
-                                  final confirm = await showDialog<bool>(
-                                    context: context,
-                                    builder: (c) => AlertDialog(
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(20),
-                                      ),
-                                      title: Text(
-                                        'Delete Doctor',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w700,
-                                          color: Color(0xFF1A237E),
-                                        ),
-                                      ),
-                                      content: Text(
-                                        'Are you sure you want to delete ${doctor.name}? This action cannot be undone.',
-                                        style: TextStyle(color: Color(0xFF666666)),
-                                      ),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () => Navigator.pop(c, false),
-                                          child: Text('Cancel'),
-                                        ),
-                                        ElevatedButton(
-                                          onPressed: () => Navigator.pop(c, true),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: Color(0xFFE53935),
-                                          ),
-                                          child: Text('Delete'),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                  
-                                  if (confirm == true) {
-                                    setState(() {
-                                      _doctors.removeWhere((d) => d.id == doctor.id);
-                                    });
-                                    
-                                    final prefs = await SharedPreferences.getInstance();
-                                    await prefs.setStringList(
-                                      'doctorsData',
-                                      _doctors.map((d) => d.encode()).toList(),
-                                    );
-                                    
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text('${doctor.name} has been deleted'),
-                                        backgroundColor: Color(0xFF0066CC),
-                                        behavior: SnackBarBehavior.floating,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                      ),
-                                    );
-                                  }
-                                },
                                 onViewProfile: () {
                                   _showDoctorProfile(context, doctor, isMobile);
                                 },
@@ -783,14 +726,12 @@ class _DoctorCard extends StatefulWidget {
   final Doctor doctor;
   final bool isMobile;
   final VoidCallback onBook;
-  final VoidCallback onDelete;
   final VoidCallback onViewProfile;
 
   const _DoctorCard({
     required this.doctor,
     required this.isMobile,
     required this.onBook,
-    required this.onDelete,
     required this.onViewProfile,
   });
 
@@ -937,18 +878,6 @@ class _DoctorCardState extends State<_DoctorCard> {
                                     fontSize: 13,
                                     fontWeight: FontWeight.w700,
                                   ),
-                                ),
-                              ),
-                            ),
-                            SizedBox(width: 8),
-                            IconButton(
-                              onPressed: widget.onDelete,
-                              icon: Icon(Icons.delete_outline),
-                              color: Color(0xFFE53935),
-                              style: IconButton.styleFrom(
-                                backgroundColor: Color(0xFFFFEBEE),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
                                 ),
                               ),
                             ),

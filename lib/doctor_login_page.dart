@@ -47,6 +47,83 @@ class _DoctorLoginPageState extends State<DoctorLoginPage> with SingleTickerProv
     super.dispose();
   }
 
+  Future<void> _showAvailableDoctors() async {
+    final prefs = await SharedPreferences.getInstance();
+    // Also ensure demo accounts exist (merge-only) so they can be used immediately
+    await _ensureDemoDoctors(prefs);
+    final stored = prefs.getStringList('doctorsData') ?? [];
+    final storedDoctors = stored.map((s) {
+      try {
+        final d = Doctor.decode(s);
+        return '${d.id} — ${d.name}';
+      } catch (_) {
+        return s;
+      }
+    }).toList();
+
+    final defaults = _defaultDoctors.map((d) => '${d['id']} — ${d['name']}').toList();
+
+    showDialog(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Available Doctor Accounts'),
+        content: SizedBox(
+          width: 480,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Stored in app (SharedPreferences):', style: TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                if (storedDoctors.isEmpty) const Text('- none -') else ...storedDoctors.map((s) => Text(s)),
+                const SizedBox(height: 16),
+                const Text('Fallback demo accounts (hardcoded):', style: TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                ...defaults.map((s) => Text(s)),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Close')),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _ensureDemoDoctors(SharedPreferences prefs) async {
+    final stored = prefs.getStringList('doctorsData') ?? [];
+    final List<Doctor> existing = stored.map((s) {
+      try {
+        return Doctor.decode(s);
+      } catch (_) {
+        return Doctor(name: s, id: '');
+      }
+    }).toList();
+
+    final demoDefaults = [
+      Doctor(id: 'dr1', name: 'Dr. Maria Santos', specialty: 'Pediatrician', imageUrl: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=600&h=700&fit=crop'),
+      Doctor(id: 'dr2', name: 'Dr. Juan Dela Cruz', specialty: 'Cardiologist', imageUrl: 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=600&h=700&fit=crop'),
+      Doctor(id: 'dr3', name: 'Dr. Anna Reyes', specialty: 'Dermatologist', imageUrl: 'https://images.unsplash.com/photo-1594824476967-48c8b964273f?w=600&h=700&fit=crop'),
+      Doctor(id: 'dr4', name: 'Dr. Roberto Garcia', specialty: 'OB-GYN', imageUrl: 'https://images.unsplash.com/photo-1537368910025-700350fe46c7?w=600&h=700&fit=crop'),
+      Doctor(id: 'dr5', name: 'Dr. Elena Cruz', specialty: 'General Practitioner', imageUrl: 'https://images.unsplash.com/photo-1651008376811-b90baee60c1f?w=600&h=700&fit=crop'),
+      Doctor(id: 'dr6', name: 'Dr. Michael Tan', specialty: 'Neurologist', imageUrl: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=600&h=700&fit=crop'),
+    ];
+
+    final existingIds = existing.map((d) => d.id).toSet();
+    final existingNames = existing.map((d) => d.name.toLowerCase()).toSet();
+    var changed = false;
+    for (final demo in demoDefaults) {
+      if (!existingIds.contains(demo.id) && !existingNames.contains(demo.name.toLowerCase())) {
+        existing.add(demo);
+        changed = true;
+      }
+    }
+    if (changed) {
+      await prefs.setStringList('doctorsData', existing.map((d) => d.encode()).toList());
+    }
+  }
+
   Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -408,6 +485,14 @@ class _DoctorLoginPageState extends State<DoctorLoginPage> with SingleTickerProv
                                         _buildCredentialRow('Doctor ID:', 'dr1, dr2, dr3, dr4, dr5, dr6'),
                                         const SizedBox(height: 4),
                                         _buildCredentialRow('Password:', 'doctor123'),
+                                        const SizedBox(height: 8),
+                                        Align(
+                                          alignment: Alignment.centerRight,
+                                          child: TextButton(
+                                            onPressed: _showAvailableDoctors,
+                                            child: const Text('Show available accounts'),
+                                          ),
+                                        ),
                                       ],
                                     ),
                                   ),

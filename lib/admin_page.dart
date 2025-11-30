@@ -116,6 +116,28 @@ class _AdminPageState extends State<AdminPage> with TickerProviderStateMixin {
     final saved = prefs.getStringList('doctorsData');
     if (saved != null && saved.isNotEmpty) {
       _doctors = saved.map((s) => Doctor.decode(s)).toList();
+      // Ensure demo accounts (dr1..dr6) exist in a merge-only fashion
+      final demoDefaults = [
+        Doctor(id: 'dr1', name: 'Dr. Maria Santos', specialty: 'Pediatrician', imageUrl: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=600&h=700&fit=crop', availableDays: ['Monday', 'Wednesday', 'Friday'], availableTimes: ['09:00 AM', '05:00 PM']),
+        Doctor(id: 'dr2', name: 'Dr. Juan Dela Cruz', specialty: 'Cardiologist', imageUrl: 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=600&h=700&fit=crop', availableDays: ['Tuesday', 'Thursday'], availableTimes: ['10:00 AM', '04:00 PM']),
+        Doctor(id: 'dr3', name: 'Dr. Anna Reyes', specialty: 'Dermatologist', imageUrl: 'https://images.unsplash.com/photo-1594824476967-48c8b964273f?w=600&h=700&fit=crop', availableDays: ['Monday', 'Tuesday', 'Thursday'], availableTimes: ['09:00 AM', '03:00 PM']),
+        Doctor(id: 'dr4', name: 'Dr. Roberto Garcia', specialty: 'OB-GYN', imageUrl: 'https://images.unsplash.com/photo-1537368910025-700350fe46c7?w=600&h=700&fit=crop', availableDays: ['Wednesday', 'Friday'], availableTimes: ['08:00 AM', '04:00 PM']),
+        Doctor(id: 'dr5', name: 'Dr. Elena Cruz', specialty: 'General Practitioner', imageUrl: 'https://images.unsplash.com/photo-1651008376811-b90baee60c1f?w=600&h=700&fit=crop', availableDays: ['Monday','Tuesday','Wednesday','Thursday','Friday'], availableTimes: ['09:00 AM','05:00 PM']),
+        Doctor(id: 'dr6', name: 'Dr. Michael Tan', specialty: 'Neurologist', imageUrl: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=600&h=700&fit=crop', availableDays: ['Monday','Thursday'], availableTimes: ['10:00 AM','03:00 PM']),
+      ];
+
+      final existingIds = _doctors.map((d) => d.id).toSet();
+      final existingNames = _doctors.map((d) => d.name.toLowerCase()).toSet();
+      var added = false;
+      for (final demo in demoDefaults) {
+        if (!existingIds.contains(demo.id) && !existingNames.contains(demo.name.toLowerCase())) {
+          _doctors.add(demo);
+          added = true;
+        }
+      }
+      if (added) {
+        await prefs.setStringList('doctorsData', _doctors.map((d) => d.encode()).toList());
+      }
     } else {
       // Use default doctors if no saved data
       _doctors = List.from(_defaultDoctors);

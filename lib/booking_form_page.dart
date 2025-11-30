@@ -1125,7 +1125,7 @@ class _BookingFormPageState extends State<BookingFormPage> with SingleTickerProv
 
   Widget _buildDoctorCard(Doctor doctor, bool isSelected, bool isMobile) {
     return InkWell(
-      onTap: () => setState(() => _selectedDoctorId = doctor.id),
+      onTap: () => setState(() => _selectedDoctorId = (_selectedDoctorId == doctor.id) ? null : doctor.id),
       borderRadius: BorderRadius.circular(16),
       child: Container(
         padding: EdgeInsets.all(16),
@@ -1197,7 +1197,7 @@ class _BookingFormPageState extends State<BookingFormPage> with SingleTickerProv
                       SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          doctor.availableDays.take(2).join(', '),
+                          doctor.availableDays.join(', '),
                           style: TextStyle(
                             fontSize: 11,
                             color: Color(0xFF666666),

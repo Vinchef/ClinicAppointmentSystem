@@ -78,25 +78,60 @@ class _DoctorDashboardState extends State<DoctorDashboard> with TickerProviderSt
     
     // Load all appointments
     final appointments = await AppointmentService.getAllAppointments();
+
+    // Helper to normalize doctor names (remove "Dr." prefix, punctuation, extra spaces)
+    String normalizeName(String s) {
+      return s
+          .toLowerCase()
+          .replaceAll(RegExp(r'dr\.?\s*'), '') // remove dr or dr.
+          .replaceAll(RegExp(r'[^a-z0-9\s]'), '')
+          .trim();
+    }
+
+    final normDoctorName = normalizeName(_doctorName);
+
+    // Filter appointments for this doctor using id first, then normalized name matching as fallback
+    _allAppointments = appointments.where((apt) {
+      try {
+        final normAptName = normalizeName(apt.doctorName);
+        if (apt.doctorId.isNotEmpty && _doctorId.isNotEmpty) {
+          if (apt.doctorId == _doctorId) return true;
+        }
+        if (normDoctorName.isNotEmpty && normAptName.isNotEmpty) {
+          if (normAptName == normDoctorName) return true;
+          if (normAptName.contains(normDoctorName) || normDoctorName.contains(normAptName)) return true;
+        }
+      } catch (_) {}
+      return false;
+    }).toList();
     
-    // Filter appointments for this doctor
-    _allAppointments = appointments.where((apt) => 
-      apt.doctorName.toLowerCase().contains(_doctorName.toLowerCase().split(' ').last) ||
-      apt.doctorId == _doctorId
-    ).toList();
-    
-    // Sort by date
-    _allAppointments.sort((a, b) => a.date.compareTo(b.date));
-    
+    // Sort by date (try parsing dates where possible)
+    _allAppointments.sort((a, b) {
+      try {
+        final da = DateTime.parse(a.date);
+        final db = DateTime.parse(b.date);
+        return da.compareTo(db);
+      } catch (_) {
+        return a.date.compareTo(b.date);
+      }
+    });
+
     // Categorize appointments
     final today = DateTime.now();
-    final todayStr = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
-    
-    _todayAppointments = _allAppointments.where((apt) => 
-      apt.date == todayStr && apt.status != 'cancelled'
-    ).toList();
-    
-    _upcomingAppointments = _allAppointments.where((apt) => 
+
+    _todayAppointments = _allAppointments.where((apt) {
+      if (apt.status == 'cancelled') return false;
+      try {
+        final aptDate = DateTime.parse(apt.date);
+        return aptDate.year == today.year && aptDate.month == today.month && aptDate.day == today.day;
+      } catch (_) {
+        // Fallback to string compare if parse fails
+        final todayStr = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+        return apt.date == todayStr;
+      }
+    }).toList();
+
+    _upcomingAppointments = _allAppointments.where((apt) =>
       apt.status == 'confirmed' || apt.status == 'rescheduled'
     ).toList();
     
@@ -729,7 +764,14 @@ class _DoctorDashboardState extends State<DoctorDashboard> with TickerProviderSt
     for (int day = 1; day <= lastDay.day; day++) {
       final date = DateTime(_focusedMonth.year, _focusedMonth.month, day);
       final dateStr = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-      final hasAppointments = _allAppointments.any((apt) => apt.date == dateStr);
+      final hasAppointments = _allAppointments.any((apt) {
+        try {
+          final aptDate = DateTime.parse(apt.date);
+          return aptDate.year == date.year && aptDate.month == date.month && aptDate.day == date.day;
+        } catch (_) {
+          return apt.date == dateStr;
+        }
+      });
       final isSelected = _selectedDate.day == day && _selectedDate.month == _focusedMonth.month && _selectedDate.year == _focusedMonth.year;
       final isToday = DateTime.now().day == day && DateTime.now().month == _focusedMonth.month && DateTime.now().year == _focusedMonth.year;
       
@@ -774,7 +816,14 @@ class _DoctorDashboardState extends State<DoctorDashboard> with TickerProviderSt
 
   Widget _buildSelectedDayAppointments() {
     final dateStr = '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
-    final dayAppointments = _allAppointments.where((apt) => apt.date == dateStr).toList();
+    final dayAppointments = _allAppointments.where((apt) {
+      try {
+        final aptDate = DateTime.parse(apt.date);
+        return aptDate.year == _selectedDate.year && aptDate.month == _selectedDate.month && aptDate.day == _selectedDate.day;
+      } catch (_) {
+        return apt.date == dateStr;
+      }
+    }).toList();
     
     if (dayAppointments.isEmpty) {
       return _buildEmptyState('No appointments on this day', Icons.event_busy);
