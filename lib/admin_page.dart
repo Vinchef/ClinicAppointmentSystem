@@ -1283,8 +1283,38 @@ class _AdminPageState extends State<AdminPage> with TickerProviderStateMixin {
 
   Widget _buildDashboardView() {
     final todayAppointments = _appointments.where((a) => a.isToday && a.status != 'cancelled').toList();
-    final pendingAppointments = _appointments.where((a) => a.status == 'confirmed').length;
+    final pendingAppointments = _appointments.where((a) => a.status == 'confirmed' || a.status == 'rescheduled').length;
     final completedAppointments = _appointments.where((a) => a.status == 'completed').length;
+    final cancelledAppointments = _appointments.where((a) => a.status == 'cancelled').length;
+    final noShowAppointments = _appointments.where((a) => a.status == 'no_show').length;
+    
+    // Calculate revenue only from completed and confirmed appointments (not cancelled/no-show)
+    double totalRevenue = 0;
+    for (final apt in _appointments) {
+      if (apt.status == 'cancelled' || apt.status == 'no_show') continue;
+      
+      // Find the doctor's consultation fee
+      final doctor = _doctors.where((d) => 
+        d.id == apt.doctorId || 
+        d.name.toLowerCase() == apt.doctorName.toLowerCase()
+      ).firstOrNull;
+      
+      final fee = doctor?.consultationFee ?? 500.0; // Default fee if doctor not found
+      totalRevenue += fee;
+    }
+    
+    // Calculate actual revenue (completed only)
+    double actualRevenue = 0;
+    for (final apt in _appointments) {
+      if (apt.status != 'completed') continue;
+      final doctor = _doctors.where((d) => 
+        d.id == apt.doctorId || 
+        d.name.toLowerCase() == apt.doctorName.toLowerCase()
+      ).firstOrNull;
+      final fee = doctor?.consultationFee ?? 500.0;
+      actualRevenue += fee;
+    }
+    
     final now = DateTime.now();
     final greeting = now.hour < 12 ? 'Good Morning' : now.hour < 17 ? 'Good Afternoon' : 'Good Evening';
     
@@ -1358,9 +1388,9 @@ class _AdminPageState extends State<AdminPage> with TickerProviderStateMixin {
               childAspectRatio: 1.6,
               children: [
                 _buildStatCard('Total Doctors', _doctors.length.toString(), Icons.medical_services_rounded, const Color(0xFF0066CC), 'Medical Staff', [const Color(0xFF0066CC), const Color(0xFF1976D2)]),
-                _buildStatCard('Appointments', _appointments.length.toString(), Icons.calendar_month_rounded, const Color(0xFF4CAF50), '${todayAppointments.length} scheduled today', [const Color(0xFF4CAF50), const Color(0xFF66BB6A)]),
+                _buildStatCard('Appointments', '${_appointments.length - cancelledAppointments}', Icons.calendar_month_rounded, const Color(0xFF4CAF50), '$completedAppointments completed, $pendingAppointments pending', [const Color(0xFF4CAF50), const Color(0xFF66BB6A)]),
                 _buildStatCard('Patients', _users.length.toString(), Icons.people_alt_rounded, const Color(0xFF9C27B0), 'Registered users', [const Color(0xFF9C27B0), const Color(0xFFBA68C8)]),
-                _buildStatCard('Revenue', '₱${(_appointments.length * 500).toString()}', Icons.payments_rounded, const Color(0xFFFF9800), 'Estimated total', [const Color(0xFFFF9800), const Color(0xFFFFB74D)]),
+                _buildStatCard('Revenue', '₱${actualRevenue.toStringAsFixed(0)}', Icons.payments_rounded, const Color(0xFFFF9800), '₱${totalRevenue.toStringAsFixed(0)} expected', [const Color(0xFFFF9800), const Color(0xFFFFB74D)]),
               ],
             );
           },
@@ -2352,118 +2382,295 @@ class _AdminPageState extends State<AdminPage> with TickerProviderStateMixin {
   // ==================== REPORTS VIEW ====================
 
   Widget _buildReportsView() {
+    // Calculate statistics (excluding cancelled from active counts)
+    final completedApts = _appointments.where((a) => a.status == 'completed').toList();
+    final confirmedApts = _appointments.where((a) => a.status == 'confirmed' || a.status == 'rescheduled').toList();
+    final cancelledApts = _appointments.where((a) => a.status == 'cancelled').toList();
+    final noShowApts = _appointments.where((a) => a.status == 'no_show').toList();
+    final activeApts = _appointments.where((a) => a.status != 'cancelled' && a.status != 'no_show').toList();
+    
+    // Specialty breakdown (exclude cancelled)
     final specialtyCounts = <String, int>{};
-    for (var apt in _appointments) {
-      final specialty = apt.specialty.isNotEmpty ? apt.specialty : 'Unknown';
+    final specialtyRevenue = <String, double>{};
+    for (var apt in activeApts) {
+      final specialty = apt.specialty.isNotEmpty ? apt.specialty : 'General';
       specialtyCounts[specialty] = (specialtyCounts[specialty] ?? 0) + 1;
+      
+      // Get doctor fee for this appointment
+      final doctor = _doctors.where((d) => d.id == apt.doctorId || d.name.toLowerCase() == apt.doctorName.toLowerCase()).firstOrNull;
+      final fee = doctor?.consultationFee ?? 500.0;
+      specialtyRevenue[specialty] = (specialtyRevenue[specialty] ?? 0) + fee;
     }
+    
+    // Revenue calculations
+    double actualRevenue = 0; // Completed only
+    double expectedRevenue = 0; // Completed + Confirmed
+    for (var apt in _appointments) {
+      if (apt.status == 'cancelled' || apt.status == 'no_show') continue;
+      final doctor = _doctors.where((d) => d.id == apt.doctorId || d.name.toLowerCase() == apt.doctorName.toLowerCase()).firstOrNull;
+      final fee = doctor?.consultationFee ?? 500.0;
+      expectedRevenue += fee;
+      if (apt.status == 'completed') actualRevenue += fee;
+    }
+    
+    // Calculate lost revenue from cancellations
+    double lostRevenue = 0;
+    for (var apt in cancelledApts) {
+      final doctor = _doctors.where((d) => d.id == apt.doctorId || d.name.toLowerCase() == apt.doctorName.toLowerCase()).firstOrNull;
+      lostRevenue += doctor?.consultationFee ?? 500.0;
+    }
+    
+    // Success rate
+    final totalProcessed = completedApts.length + cancelledApts.length + noShowApts.length;
+    final successRate = totalProcessed > 0 ? (completedApts.length / totalProcessed * 100) : 0.0;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('Reports & Analytics', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Color(0xFF1A237E), fontFamily: 'Montserrat')),
-        const SizedBox(height: 24),
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Reports & Analytics', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Color(0xFF1A237E), fontFamily: 'Montserrat')),
+          const SizedBox(height: 24),
 
-        // Summary Cards
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final isWide = constraints.maxWidth > 600;
-            return Wrap(
-              spacing: 16,
-              runSpacing: 16,
+          // Revenue Summary Cards
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth > 800;
+              final cardWidth = isWide ? (constraints.maxWidth - 48) / 4 : (constraints.maxWidth - 16) / 2;
+              return Wrap(
+                spacing: 16,
+                runSpacing: 16,
+                children: [
+                  SizedBox(width: cardWidth, child: _buildReportCard('Actual Revenue', '₱${actualRevenue.toStringAsFixed(0)}', Icons.payments_rounded, const Color(0xFF4CAF50))),
+                  SizedBox(width: cardWidth, child: _buildReportCard('Expected Revenue', '₱${expectedRevenue.toStringAsFixed(0)}', Icons.trending_up, const Color(0xFF0066CC))),
+                  SizedBox(width: cardWidth, child: _buildReportCard('Lost Revenue', '₱${lostRevenue.toStringAsFixed(0)}', Icons.trending_down, const Color(0xFFE53935))),
+                  SizedBox(width: cardWidth, child: _buildReportCard('Success Rate', '${successRate.toStringAsFixed(1)}%', Icons.verified, const Color(0xFFFF9800))),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 24),
+
+          // Appointment Status Breakdown
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SizedBox(width: isWide ? (constraints.maxWidth - 16) / 2 : constraints.maxWidth, child: _buildReportCard('Total Bookings This Month', _bookedAppointments.length.toString(), Icons.calendar_month, const Color(0xFF0066CC))),
-                SizedBox(width: isWide ? (constraints.maxWidth - 16) / 2 : constraints.maxWidth, child: _buildReportCard('Active Doctors', _doctors.length.toString(), Icons.people, const Color(0xFF4CAF50))),
-                SizedBox(width: isWide ? (constraints.maxWidth - 16) / 2 : constraints.maxWidth, child: _buildReportCard('Registered Users', _users.length.toString(), Icons.person, const Color(0xFF9C27B0))),
-                SizedBox(width: isWide ? (constraints.maxWidth - 16) / 2 : constraints.maxWidth, child: _buildReportCard('Completed Appointments', _appointments.where((a) => a.status == 'completed').length.toString(), Icons.check_circle, const Color(0xFFFF9800))),
+                const Text('Appointment Status Breakdown', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF1A237E))),
+                const SizedBox(height: 20),
+                _buildStatusRow('Completed', completedApts.length, const Color(0xFF4CAF50), _appointments.length),
+                _buildStatusRow('Confirmed/Pending', confirmedApts.length, const Color(0xFF0066CC), _appointments.length),
+                _buildStatusRow('Cancelled', cancelledApts.length, const Color(0xFFE53935), _appointments.length),
+                _buildStatusRow('No Show', noShowApts.length, const Color(0xFFFF9800), _appointments.length),
               ],
-            );
-          },
-        ),
-        const SizedBox(height: 32),
-
-        // Bookings by Specialty
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Bookings by Specialty', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF1A237E), fontFamily: 'Montserrat')),
-              const SizedBox(height: 16),
-              if (specialtyCounts.isEmpty)
-                const Center(child: Padding(padding: EdgeInsets.all(20), child: Text('No data available')))
-              else
-                ...specialtyCounts.entries.map((e) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Row(
-                    children: [
-                      Expanded(flex: 2, child: Text(e.key, style: const TextStyle(fontFamily: 'Montserrat'))),
-                      Expanded(
-                        flex: 3,
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: LinearProgressIndicator(
-                            value: _appointments.isEmpty ? 0 : e.value / _appointments.length,
-                            backgroundColor: const Color(0xFFE0E0E0),
-                            valueColor: const AlwaysStoppedAnimation(Color(0xFF0066CC)),
-                            minHeight: 8,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Text('${e.value}', style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF1A237E))),
-                    ],
-                  ),
-                )).toList(),
-            ],
+            ),
           ),
-        ),
-        const SizedBox(height: 24),
+          const SizedBox(height: 24),
 
-        // Top Doctors
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Top Performing Doctors', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF1A237E), fontFamily: 'Montserrat')),
-              const SizedBox(height: 16),
-              ..._doctors.take(5).map((doctor) {
-                final count = _getBookingCountForDoctor(doctor);
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 20,
-                        backgroundColor: const Color(0xFF0066CC).withOpacity(0.1),
-                        child: Text(doctor.name.isNotEmpty ? doctor.name[0] : 'D', style: const TextStyle(color: Color(0xFF0066CC), fontWeight: FontWeight.w700)),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(doctor.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                            Text(doctor.specialty, style: const TextStyle(fontSize: 12, color: Color(0xFF666666))),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(color: const Color(0xFF0066CC), borderRadius: BorderRadius.circular(20)),
-                        child: Text('$count bookings', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 12)),
-                      ),
-                    ],
-                  ),
+          // Two column layout for charts
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth > 900) {
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: _buildSpecialtyBreakdown(specialtyCounts, activeApts.length)),
+                    const SizedBox(width: 24),
+                    Expanded(child: _buildRevenueBySpecialty(specialtyRevenue)),
+                  ],
                 );
-              }).toList(),
+              }
+              return Column(
+                children: [
+                  _buildSpecialtyBreakdown(specialtyCounts, activeApts.length),
+                  const SizedBox(height: 24),
+                  _buildRevenueBySpecialty(specialtyRevenue),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 24),
+
+          // Top Performing Doctors (by completed appointments)
+          _buildTopDoctorsCard(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusRow(String label, int count, Color color, int total) {
+    final percentage = total > 0 ? count / total : 0.0;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(width: 12, height: 12, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3))),
+                  const SizedBox(width: 8),
+                  Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+                ],
+              ),
+              Text('$count (${(percentage * 100).toStringAsFixed(1)}%)', style: TextStyle(fontWeight: FontWeight.w700, color: color)),
             ],
           ),
-        ),
-      ],
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(value: percentage, backgroundColor: const Color(0xFFE0E0E0), valueColor: AlwaysStoppedAnimation(color), minHeight: 8),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSpecialtyBreakdown(Map<String, int> specialtyCounts, int total) {
+    final sortedEntries = specialtyCounts.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Bookings by Specialty', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF1A237E))),
+          const SizedBox(height: 16),
+          if (sortedEntries.isEmpty)
+            const Center(child: Padding(padding: EdgeInsets.all(20), child: Text('No active bookings', style: TextStyle(color: Color(0xFF666666)))))
+          else
+            ...sortedEntries.map((e) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                children: [
+                  Expanded(flex: 2, child: Text(e.key, style: const TextStyle(fontWeight: FontWeight.w500))),
+                  Expanded(
+                    flex: 3,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: total > 0 ? e.value / total : 0,
+                        backgroundColor: const Color(0xFFE0E0E0),
+                        valueColor: const AlwaysStoppedAnimation(Color(0xFF0066CC)),
+                        minHeight: 8,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  SizedBox(width: 40, child: Text('${e.value}', style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF1A237E)), textAlign: TextAlign.right)),
+                ],
+              ),
+            )).toList(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRevenueBySpecialty(Map<String, double> specialtyRevenue) {
+    final sortedEntries = specialtyRevenue.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    final maxRevenue = sortedEntries.isNotEmpty ? sortedEntries.first.value : 1.0;
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Revenue by Specialty', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF1A237E))),
+          const SizedBox(height: 16),
+          if (sortedEntries.isEmpty)
+            const Center(child: Padding(padding: EdgeInsets.all(20), child: Text('No revenue data', style: TextStyle(color: Color(0xFF666666)))))
+          else
+            ...sortedEntries.map((e) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                children: [
+                  Expanded(flex: 2, child: Text(e.key, style: const TextStyle(fontWeight: FontWeight.w500))),
+                  Expanded(
+                    flex: 3,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: e.value / maxRevenue,
+                        backgroundColor: const Color(0xFFE0E0E0),
+                        valueColor: const AlwaysStoppedAnimation(Color(0xFF4CAF50)),
+                        minHeight: 8,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  SizedBox(width: 80, child: Text('₱${e.value.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF4CAF50)), textAlign: TextAlign.right)),
+                ],
+              ),
+            )).toList(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTopDoctorsCard() {
+    // Calculate completed appointments per doctor
+    final doctorStats = <String, Map<String, dynamic>>{};
+    for (var apt in _appointments) {
+      if (apt.status == 'cancelled' || apt.status == 'no_show') continue;
+      final key = apt.doctorId.isNotEmpty ? apt.doctorId : apt.doctorName;
+      doctorStats[key] ??= {'completed': 0, 'total': 0, 'revenue': 0.0, 'name': apt.doctorName};
+      doctorStats[key]!['total'] = (doctorStats[key]!['total'] as int) + 1;
+      if (apt.status == 'completed') {
+        doctorStats[key]!['completed'] = (doctorStats[key]!['completed'] as int) + 1;
+        final doctor = _doctors.where((d) => d.id == apt.doctorId || d.name.toLowerCase() == apt.doctorName.toLowerCase()).firstOrNull;
+        doctorStats[key]!['revenue'] = (doctorStats[key]!['revenue'] as double) + (doctor?.consultationFee ?? 500.0);
+      }
+    }
+    
+    final sortedDoctors = doctorStats.entries.toList()..sort((a, b) => (b.value['completed'] as int).compareTo(a.value['completed'] as int));
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Top Performing Doctors', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF1A237E))),
+          const Text('Ranked by completed appointments', style: TextStyle(fontSize: 12, color: Color(0xFF666666))),
+          const SizedBox(height: 16),
+          if (sortedDoctors.isEmpty)
+            const Center(child: Padding(padding: EdgeInsets.all(20), child: Text('No appointment data', style: TextStyle(color: Color(0xFF666666)))))
+          else
+            ...sortedDoctors.take(5).map((entry) {
+              final stats = entry.value;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 22,
+                      backgroundColor: const Color(0xFF0066CC).withOpacity(0.1),
+                      child: Text((stats['name'] as String).isNotEmpty ? (stats['name'] as String)[0] : 'D', style: const TextStyle(color: Color(0xFF0066CC), fontWeight: FontWeight.w700)),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(stats['name'] as String, style: const TextStyle(fontWeight: FontWeight.w600)),
+                          Text('${stats['completed']} completed / ${stats['total']} total', style: const TextStyle(fontSize: 12, color: Color(0xFF666666))),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(color: const Color(0xFF4CAF50), borderRadius: BorderRadius.circular(20)),
+                      child: Text('₱${(stats['revenue'] as double).toStringAsFixed(0)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 12)),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+        ],
+      ),
     );
   }
 

@@ -20,10 +20,11 @@ class _DoctorBrowsePageState extends State<DoctorBrowsePage> with SingleTickerPr
   final List<String> _specialties = [
     'All',
     'Pediatrician',
-    'Dermatologist',
-    'Neurologist',
     'Cardiologist',
-    'Orthopedic',
+    'Dermatologist',
+    'OB-GYN',
+    'General Practitioner',
+    'Neurologist',
   ];
 
   @override
@@ -48,50 +49,106 @@ class _DoctorBrowsePageState extends State<DoctorBrowsePage> with SingleTickerPr
       _userName = userName;
     });
     
+    // Force refresh doctor data if not migrated to v3 (consistent IDs)
+    final migratedV3 = prefs.getBool('doctors_migrated_v3') ?? false;
+    if (!migratedV3) {
+      await prefs.remove('doctorsData');
+      await prefs.setBool('doctors_migrated_v3', true);
+    }
+    
     final list = prefs.getStringList('doctorsData') ?? [];
     if (list.isEmpty) {
+      // Use same doctors as login page for consistency
       final defaults = [
         Doctor(
-          name: 'Dr. Sarah Martinez',
-          specialty: 'Cardiologist',
+          id: 'dr1',
+          name: 'Dr. Maria Santos',
+          specialty: 'Pediatrician',
           imageUrl: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=600&h=700&fit=crop',
           availableDays: ['Monday', 'Wednesday', 'Friday'],
-          availableTimes: ['09:00 AM', '02:00 PM', '04:00 PM'],
+          availableTimes: ['09:00 AM', '10:00 AM', '02:00 PM', '03:00 PM', '05:00 PM'],
+          experienceYears: 8,
+          rating: 4.9,
+          patientsCount: 1200,
+          consultationFee: 500,
+          bio: 'Specialized in pediatric care with 8 years of experience.',
+          education: 'MD Pediatrics - UP Manila',
+          password: 'doctor123',
         ),
         Doctor(
-          name: 'Dr. Michael Chen',
-          specialty: 'Pediatrician',
-          imageUrl: 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=600&h=700&fit=crop',
-          availableDays: ['Tuesday', 'Thursday'],
-          availableTimes: ['10:00 AM', '01:00 PM', '03:00 PM'],
-        ),
-        Doctor(
-          name: 'Dr. Emily Roberts',
-          specialty: 'Orthopedic',
-          imageUrl: 'https://images.unsplash.com/photo-1594824476967-48c8b964273f?w=600&h=700&fit=crop',
-          availableDays: ['Monday', 'Tuesday', 'Thursday'],
-          availableTimes: ['08:00 AM', '11:00 AM', '02:00 PM'],
-        ),
-        Doctor(
-          name: 'Dr. James Wilson',
-          specialty: 'Neurologist',
-          imageUrl: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=600&h=700&fit=crop',
-          availableDays: ['Wednesday', 'Friday'],
-          availableTimes: ['09:00 AM', '12:00 PM', '03:00 PM'],
-        ),
-        Doctor(
-          name: 'Dr. Lisa Anderson',
-          specialty: 'Dermatologist',
-          imageUrl: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=600&h=700&fit=crop',
-          availableDays: ['Monday', 'Wednesday', 'Saturday'],
-          availableTimes: ['10:00 AM', '01:00 PM', '04:00 PM'],
-        ),
-        Doctor(
-          name: 'Dr. David Kim',
+          id: 'dr2',
+          name: 'Dr. Juan Dela Cruz',
           specialty: 'Cardiologist',
           imageUrl: 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=600&h=700&fit=crop',
-          availableDays: ['Tuesday', 'Thursday', 'Friday'],
-          availableTimes: ['08:00 AM', '11:00 AM', '02:00 PM'],
+          availableDays: ['Tuesday', 'Thursday'],
+          availableTimes: ['10:00 AM', '11:00 AM', '01:00 PM', '03:00 PM', '04:00 PM'],
+          experienceYears: 12,
+          rating: 4.8,
+          patientsCount: 2500,
+          consultationFee: 800,
+          bio: 'Expert in cardiovascular diseases and heart health.',
+          education: 'MD Cardiology - UST',
+          password: 'doctor123',
+        ),
+        Doctor(
+          id: 'dr3',
+          name: 'Dr. Anna Reyes',
+          specialty: 'Dermatologist',
+          imageUrl: 'https://images.unsplash.com/photo-1594824476967-48c8b964273f?w=600&h=700&fit=crop',
+          availableDays: ['Monday', 'Tuesday', 'Thursday'],
+          availableTimes: ['09:00 AM', '10:00 AM', '11:00 AM', '02:00 PM', '03:00 PM'],
+          experienceYears: 6,
+          rating: 4.7,
+          patientsCount: 800,
+          consultationFee: 600,
+          bio: 'Specializing in skin care and cosmetic dermatology.',
+          education: 'MD Dermatology - UERM',
+          password: 'doctor123',
+        ),
+        Doctor(
+          id: 'dr4',
+          name: 'Dr. Roberto Garcia',
+          specialty: 'OB-GYN',
+          imageUrl: 'https://images.unsplash.com/photo-1537368910025-700350fe46c7?w=600&h=700&fit=crop',
+          availableDays: ['Wednesday', 'Friday'],
+          availableTimes: ['08:00 AM', '09:00 AM', '10:00 AM', '02:00 PM', '04:00 PM'],
+          experienceYears: 15,
+          rating: 4.9,
+          patientsCount: 3000,
+          consultationFee: 750,
+          bio: 'Experienced in obstetrics and gynecology care.',
+          education: 'MD OB-GYN - PGH',
+          password: 'doctor123',
+        ),
+        Doctor(
+          id: 'dr5',
+          name: 'Dr. Elena Cruz',
+          specialty: 'General Practitioner',
+          imageUrl: 'https://images.unsplash.com/photo-1651008376811-b90baee60c1f?w=600&h=700&fit=crop',
+          availableDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+          availableTimes: ['09:00 AM', '10:00 AM', '11:00 AM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM'],
+          experienceYears: 10,
+          rating: 4.8,
+          patientsCount: 5000,
+          consultationFee: 400,
+          bio: 'Family medicine specialist providing comprehensive care.',
+          education: 'MD Family Medicine - Ateneo',
+          password: 'doctor123',
+        ),
+        Doctor(
+          id: 'dr6',
+          name: 'Dr. Michael Tan',
+          specialty: 'Neurologist',
+          imageUrl: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=600&h=700&fit=crop',
+          availableDays: ['Monday', 'Thursday'],
+          availableTimes: ['10:00 AM', '11:00 AM', '01:00 PM', '02:00 PM', '03:00 PM'],
+          experienceYears: 9,
+          rating: 4.6,
+          patientsCount: 900,
+          consultationFee: 700,
+          bio: 'Specialized in neurological disorders and brain health.',
+          education: 'MD Neurology - SLMC',
+          password: 'doctor123',
         ),
       ];
       await prefs.setStringList('doctorsData', defaults.map((d) => d.encode()).toList());
