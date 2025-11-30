@@ -39,7 +39,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
     await prefs.remove('fullName');
     await prefs.remove('phoneNumber');
     await prefs.remove('userType');
-    if (mounted) Navigator.pushReplacementNamed(context, '/home');
+    if (mounted) Navigator.pushReplacementNamed(context, '/landing');
   }
 
   @override
